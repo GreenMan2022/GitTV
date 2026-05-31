@@ -1,4 +1,4 @@
-// ============== TV CHANNEL FINDER - ПОЛНЫЙ ПОИСК КАК В PYTHON ==============
+// ============== TV CHANNEL FINDER - С УПРАВЛЕНИЕМ ТОКЕНОМ ==============
 
 class TVChannelFinder {
     constructor() {
@@ -14,7 +14,7 @@ class TVChannelFinder {
         this.playlist = this.loadPlaylist();
         this.isSearching = false;
         
-        // Языковые модификаторы (как в Python)
+        // Языковые модификаторы
         this.langModifiers = {
             russian: ['ru', 'russian', 'россия', 'русский'],
             english: ['en', 'english', 'usa', 'uk'],
@@ -27,24 +27,91 @@ class TVChannelFinder {
     }
     
     loadGitHubToken() {
-        let token = localStorage.getItem('github_token');
-        if (!token) {
-            token = prompt(
-                '🔑 Введите GitHub Personal Access Token\n\n' +
-                'Как получить:\n' +
-                '1. GitHub Settings → Developer settings\n' +
-                '2. Personal access tokens → Tokens (classic)\n' +
-                '3. Generate new token\n' +
-                '4. Выберите права: repo, read:user\n\n' +
-                'Без токена - 60 запросов/час\n' +
-                'С токеном - 5000 запросов/час\n\n' +
-                'Можно нажать Отмена для демо-режима'
-            );
-            if (token && token.length > 10) {
-                localStorage.setItem('github_token', token);
+        // Загружаем токен из localStorage
+        const savedToken = localStorage.getItem('github_token');
+        if (savedToken && savedToken.length > 10) {
+            console.log('✅ GitHub токен загружен из localStorage');
+            return savedToken;
+        }
+        return null;
+    }
+    
+    saveGitHubToken(token) {
+        if (token && token.length > 10) {
+            localStorage.setItem('github_token', token);
+            this.githubToken = token;
+            console.log('✅ GitHub токен сохранен');
+            this.showToast('GitHub токен сохранен!', 'success');
+            this.checkGitHubRateLimit();
+        } else {
+            this.showToast('Неверный токен. Попробуйте снова.', 'warning');
+        }
+    }
+    
+    clearGitHubToken() {
+        localStorage.removeItem('github_token');
+        this.githubToken = null;
+        console.log('❌ GitHub токен удален');
+        this.showToast('GitHub токен удален. Используется режим без токена (60 запросов/час)', 'info');
+        this.updateTokenStatus();
+    }
+    
+    async checkGitHubRateLimit() {
+        if (!this.githubToken) {
+            this.updateTokenStatus('Без токена', '60 запросов/час');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${this.githubApiUrl}/rate_limit`, {
+                headers: { 'Authorization': `token ${this.githubToken}` }
+            });
+            
+            if (response.status === 200) {
+                const data = await response.json();
+                const core = data.resources.core;
+                const remaining = core.remaining;
+                const limit = core.limit;
+                const resetTime = new Date(core.reset * 1000);
+                
+                let status = `✅ Токен активен`;
+                let details = `${remaining}/${limit} запросов`;
+                let color = '#4caf50';
+                
+                if (remaining < 50) color = '#ff9800';
+                if (remaining < 10) color = '#f44336';
+                
+                this.updateTokenStatus(status, details, color);
+                
+                if (remaining < 10) {
+                    this.showToast(`⚠️ Осталось ${remaining} запросов к GitHub API! Сброс в ${resetTime.toLocaleTimeString()}`, 'warning');
+                }
+            } else {
+                this.updateTokenStatus('⚠️ Токен недействителен', 'Проверьте токен', '#f44336');
+                this.clearGitHubToken();
+            }
+        } catch (error) {
+            console.warn('Ошибка проверки токена:', error);
+            this.updateTokenStatus('❌ Ошибка проверки', 'Проверьте соединение', '#f44336');
+        }
+    }
+    
+    updateTokenStatus(status = null, details = null, color = null) {
+        const tokenStatus = document.getElementById('tokenStatus');
+        if (!tokenStatus) return;
+        
+        if (status) {
+            tokenStatus.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                    <span style="font-size: 11px;">${status}</span>
+                    ${details ? `<span style="font-size: 9px; opacity: 0.8;">${details}</span>` : ''}
+                </div>
+            `;
+            if (color) {
+                tokenStatus.style.background = `rgba(0,0,0,0.8)`;
+                tokenStatus.style.borderLeft = `3px solid ${color}`;
             }
         }
-        return token;
     }
     
     async init() {
@@ -61,6 +128,9 @@ class TVChannelFinder {
         this.previewPlayer = document.getElementById('previewPlayer');
         this.previewTitle = document.getElementById('previewTitle');
         this.closePreview = document.getElementById('closePreview');
+        
+        // Добавляем панель управления токеном
+        this.addTokenControlPanel();
         
         // Обработчики
         this.searchBtn.addEventListener('click', () => this.searchChannels());
@@ -84,8 +154,200 @@ class TVChannelFinder {
         
         this.renderPlaylist();
         
-        console.log('✅ TV Channel Finder готов (полный поиск как в Python)');
-        this.showToast('Введите название канала - поиск по всему GitHub', 'info');
+        // Проверяем статус токена
+        await this.checkGitHubRateLimit();
+        
+        console.log('✅ TV Channel Finder готов');
+        
+        // Показываем приветственное сообщение
+        if (!this.githubToken) {
+            this.showToast('💡 Для увеличения лимита до 5000 запросов/час - нажмите "Ввести токен"', 'info');
+        }
+    }
+    
+    addTokenControlPanel() {
+        // Добавляем панель управления в правый верхний угол
+        const header = document.querySelector('.header');
+        if (!header) return;
+        
+        header.style.position = 'relative';
+        
+        const controlPanel = document.createElement('div');
+        controlPanel.id = 'tokenControlPanel';
+        controlPanel.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            z-index: 10;
+        `;
+        
+        // Статус токена
+        const tokenStatus = document.createElement('div');
+        tokenStatus.id = 'tokenStatus';
+        tokenStatus.style.cssText = `
+            background: rgba(0,0,0,0.6);
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.3s;
+        `;
+        tokenStatus.innerHTML = this.githubToken ? '🔄 Проверка...' : '🔑 Без токена';
+        tokenStatus.onclick = () => this.checkGitHubRateLimit();
+        
+        // Кнопка ввода токена
+        const tokenBtn = document.createElement('button');
+        tokenBtn.id = 'tokenInputBtn';
+        tokenBtn.innerHTML = '<i class="fas fa-key"></i> Ввести токен';
+        tokenBtn.style.cssText = `
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 4px 12px;
+            border-radius: 12px;
+            color: white;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.3s;
+        `;
+        tokenBtn.onmouseenter = () => tokenBtn.style.background = 'rgba(255,255,255,0.3)';
+        tokenBtn.onmouseleave = () => tokenBtn.style.background = 'rgba(255,255,255,0.2)';
+        tokenBtn.onclick = () => this.showTokenInputDialog();
+        
+        // Кнопка удаления токена (показываем только если есть токен)
+        if (this.githubToken) {
+            const clearTokenBtn = document.createElement('button');
+            clearTokenBtn.id = 'clearTokenBtn';
+            clearTokenBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            clearTokenBtn.style.cssText = `
+                background: rgba(255,255,255,0.2);
+                border: none;
+                padding: 4px 8px;
+                border-radius: 12px;
+                color: white;
+                cursor: pointer;
+                font-size: 11px;
+                transition: all 0.3s;
+            `;
+            clearTokenBtn.onclick = () => {
+                if (confirm('Удалить сохраненный GitHub токен?')) {
+                    this.clearGitHubToken();
+                    clearTokenBtn.remove();
+                    tokenBtn.innerHTML = '<i class="fas fa-key"></i> Ввести токен';
+                }
+            };
+            controlPanel.appendChild(clearTokenBtn);
+        }
+        
+        controlPanel.appendChild(tokenStatus);
+        controlPanel.appendChild(tokenBtn);
+        header.appendChild(controlPanel);
+    }
+    
+    showTokenInputDialog() {
+        // Создаем модальное окно для ввода токена
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 20000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            color: #333;
+        `;
+        
+        dialog.innerHTML = `
+            <h2 style="margin-bottom: 20px;">
+                <i class="fab fa-github"></i> GitHub Personal Access Token
+            </h2>
+            <p style="margin-bottom: 15px; color: #666;">
+                Токен нужен для увеличения лимита запросов к GitHub API:<br>
+                <strong>Без токена:</strong> 60 запросов/час<br>
+                <strong>С токеном:</strong> 5000 запросов/час
+            </p>
+            <input type="password" id="tokenInput" placeholder="Введите GitHub токен" style="
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                margin-bottom: 15px;
+                font-size: 14px;
+            ">
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button id="saveTokenBtn" style="
+                    flex: 1;
+                    padding: 12px;
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                ">Сохранить токен</button>
+                <button id="cancelTokenBtn" style="
+                    flex: 1;
+                    padding: 12px;
+                    background: #f5f5f5;
+                    color: #333;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                ">Отмена</button>
+            </div>
+            <div style="font-size: 12px; color: #888;">
+                <p><strong>Как получить токен:</strong></p>
+                <ol style="margin-left: 20px;">
+                    <li>Перейдите на <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></li>
+                    <li>Нажмите "Generate new token (classic)"</li>
+                    <li>Выберите права: <code>repo</code>, <code>read:user</code></li>
+                    <li>Скопируйте сгенерированный токен</li>
+                </ol>
+            </div>
+        `;
+        
+        modal.appendChild(dialog);
+        document.body.appendChild(modal);
+        
+        const tokenInput = document.getElementById('tokenInput');
+        const saveBtn = document.getElementById('saveTokenBtn');
+        const cancelBtn = document.getElementById('cancelTokenBtn');
+        
+        saveBtn.onclick = () => {
+            const token = tokenInput.value.trim();
+            if (token) {
+                this.saveGitHubToken(token);
+                modal.remove();
+                // Обновляем интерфейс
+                this.addTokenControlPanel(); // Пересоздаем панель
+                this.checkGitHubRateLimit();
+            } else {
+                alert('Введите токен');
+            }
+        };
+        
+        cancelBtn.onclick = () => modal.remove();
+        
+        // Закрытие по клику вне диалога
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.remove();
+        };
+        
+        tokenInput.focus();
     }
     
     async searchChannels() {
@@ -136,7 +398,6 @@ class TVChannelFinder {
     }
     
     async fullGitHubSearch(channelName) {
-        // Точное как в Python коде
         const searchQueries = [
             `"${channelName}" extension:m3u`,
             `"${channelName}" extension:m3u8`,
@@ -165,7 +426,7 @@ class TVChannelFinder {
                     console.warn(`Ошибка запроса ${fullQuery}:`, error);
                 }
                 
-                // Задержка между запросами (важно для лимитов)
+                // Задержка между запросами
                 await this.delay(500);
             }
         }
@@ -178,7 +439,7 @@ class TVChannelFinder {
         let allChannels = [];
         let parsedCount = 0;
         
-        for (const file of uniqueFiles.slice(0, 30)) { // Максимум 30 файлов
+        for (const file of uniqueFiles.slice(0, 30)) {
             parsedCount++;
             this.updateStatus(`Парсинг файлов (${parsedCount}/${Math.min(uniqueFiles.length, 30)})...`);
             
@@ -203,7 +464,6 @@ class TVChannelFinder {
         const response = await fetch(url, { headers });
         
         if (response.status === 403) {
-            // Превышен лимит
             const resetTime = response.headers.get('X-RateLimit-Reset');
             if (resetTime) {
                 const waitTime = new Date(resetTime * 1000) - Date.now();
@@ -235,7 +495,6 @@ class TVChannelFinder {
         const channels = [];
         
         try {
-            // Получаем содержимое файла
             const rawUrl = fileInfo.url
                 .replace('api.github.com/repos', 'raw.githubusercontent.com')
                 .replace('/contents/', '/');
@@ -250,21 +509,15 @@ class TVChannelFinder {
                 const line = lines[i].trim();
                 
                 if (line.startsWith('#EXTINF:')) {
-                    // Проверяем, есть ли название канала в строке
                     if (line.toLowerCase().includes(searchQuery.toLowerCase())) {
-                        // Извлекаем название
                         let name = this.extractNameFromExtinf(line);
-                        
-                        // Извлекаем группу
                         const group = this.extractGroup(line);
                         
-                        // Ищем URL на следующих строках
                         let url = null;
                         let j = i + 1;
                         while (j < lines.length && j < i + 5) {
                             const potentialUrl = lines[j].trim();
                             if (potentialUrl && !potentialUrl.startsWith('#') && potentialUrl.startsWith('http')) {
-                                // Пропускаем ссылки на GitHub
                                 if (!potentialUrl.includes('github.com') && 
                                     !potentialUrl.includes('raw.githubusercontent.com')) {
                                     url = potentialUrl;
@@ -299,13 +552,11 @@ class TVChannelFinder {
     }
     
     extractNameFromExtinf(line) {
-        // Пробуем tvg-name
         const tvgMatch = line.match(/tvg-name="([^"]*)"/);
         if (tvgMatch && tvgMatch[1]) {
             return tvgMatch[1];
         }
         
-        // Пробуем после запятой
         const commaMatch = line.match(/,([^,]+)$/);
         if (commaMatch) {
             return commaMatch[1].trim();
@@ -505,9 +756,6 @@ class TVChannelFinder {
                 <div class="empty-playlist">
                     <i class="fas fa-plus-circle"></i>
                     <p>Добавьте каналы из результатов поиска</p>
-                    <small style="color: #888; margin-top: 10px; display: block;">
-                        Поиск работает как в Python - по всему GitHub
-                    </small>
                 </div>
             `;
             return;
@@ -592,7 +840,7 @@ class TVChannelFinder {
                 <i class="fas fa-spinner fa-spin"></i>
                 <p>🔍 Поиск каналов на GitHub...</p>
                 <small style="color: #888; margin-top: 10px; display: block;">
-                    Выполняется поиск по всему GitHub (как в Python версии)
+                    Поиск по всему GitHub (${this.githubToken ? 'с токеном ✅' : 'без токена ⚠️'})
                 </small>
             </div>
         `;
@@ -632,13 +880,11 @@ class TVChannelFinder {
                 <h3>Каналы не найдены</h3>
                 <p>По запросу "${this.escapeHtml(query)}" ничего не найдено</p>
                 <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; text-align: left;">
-                    <p><strong>💡 Советы как в Python версии:</strong></p>
+                    <p><strong>💡 Возможные причины:</strong></p>
                     <ul style="margin-top: 10px;">
-                        <li>• Проверьте правильность написания</li>
-                        <li>• Используйте короткое название (например "ТНТ")</li>
-                        <li>• Попробуйте английское название (например "TNT")</li>
-                        <li>• Смените язык поиска</li>
-                        <li>• Добавьте GitHub токен для большего лимита</li>
+                        <li>• Неверное написание названия</li>
+                        <li>• Канал действительно не найден в публичных плейлистах</li>
+                        ${!this.githubToken ? '<li>• <strong>Вы без GitHub токена</strong> (60 запросов/час). Нажмите "Ввести токен" для увеличения лимита</li>' : ''}
                     </ul>
                 </div>
             </div>
@@ -674,6 +920,7 @@ class TVChannelFinder {
             z-index: 10000;
             animation: slideUp 0.3s ease;
             white-space: nowrap;
+            font-size: 14px;
         `;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
