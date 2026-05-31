@@ -398,58 +398,54 @@ class TVChannelFinder {
     }
     
     async fullGitHubSearch(channelName) {
+        const cleanChannel = channelName.trim();
+        
+        // ТОЧНО КАК В PYTHON КОДЕ
         const searchQueries = [
-            `"${channelName}" extension:m3u`,
-            `"${channelName}" extension:m3u8`,
-            `${channelName} tv extension:m3u`,
-            `${channelName} channel extension:m3u`
+            `"${cleanChannel}" extension:m3u`,
+            `"${cleanChannel}" extension:m3u8`,
+            `${cleanChannel} tv extension:m3u`,
+            `${cleanChannel} channel extension:m3u`
         ];
         
         let allResults = [];
         const langTerms = this.langModifiers[this.currentLanguage] || this.langModifiers.russian;
         
-        this.updateStatus(`Поиск на GitHub (${searchQueries.length * langTerms.length} запросов)...`);
-        
-        let totalRequests = 0;
+        this.updateStatus(`Поиск на GitHub как в Python...`);
         
         for (const query of searchQueries) {
             for (const lang of langTerms) {
                 const fullQuery = `${query} ${lang}`;
-                totalRequests++;
-                this.updateStatus(`Запрос ${totalRequests}: "${fullQuery}"`);
+                
+                console.log(`🔍 GitHub запрос: ${fullQuery}`);
                 
                 try {
                     const results = await this.searchGitHubCode(fullQuery);
                     allResults.push(...results);
-                    console.log(`🔍 GitHub: найдено ${results.length} файлов по "${fullQuery}"`);
+                    if (results.length > 0) {
+                        console.log(`✅ Найдено ${results.length} файлов`);
+                    }
                 } catch (error) {
-                    console.warn(`Ошибка запроса ${fullQuery}:`, error);
+                    console.warn(`❌ Ошибка: ${error.message}`);
                 }
                 
-                // Задержка между запросами
                 await this.delay(500);
             }
         }
         
-        // Уникальные файлы
+        // Убираем дубликаты файлов
         const uniqueFiles = this.uniqueFiles(allResults);
-        console.log(`📄 Уникальных файлов для парсинга: ${uniqueFiles.length}`);
+        console.log(`📄 Уникальных файлов: ${uniqueFiles.length}`);
         
-        // Парсим файлы
+        // Парсим найденные файлы
         let allChannels = [];
-        let parsedCount = 0;
-        
-        for (const file of uniqueFiles.slice(0, 30)) {
-            parsedCount++;
-            this.updateStatus(`Парсинг файлов (${parsedCount}/${Math.min(uniqueFiles.length, 30)})...`);
-            
-            const channels = await this.extractStreamsFromFile(file, channelName);
+        for (const file of uniqueFiles.slice(0, 25)) {
+            const channels = await this.extractStreamsFromFile(file, cleanChannel);
             allChannels.push(...channels);
-            
             await this.delay(300);
         }
         
-        console.log(`📡 Всего извлечено потоков: ${allChannels.length}`);
+        console.log(`📡 Найдено потоков: ${allChannels.length}`);
         return allChannels;
     }
     
