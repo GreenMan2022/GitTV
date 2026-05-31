@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Channel Finder - Поиск любых каналов</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Левая панель - поиск -->
+        <div class="search-panel">
+            <div class="header">
+                <h1><i class="fas fa-search"></i> TV Channel Finder</h1>
+                <p>Поиск любых телеканалов по всему GitHub</p>
+            </div>
+
+            <!-- Поисковая форма -->
+            <div class="search-box">
+                <input type="text" id="channelSearch" placeholder="Введите название канала (например: СТС, CNN, BBC, ТНТ...)">
+                <button id="searchBtn">
+                    <i class="fas fa-search"></i> Искать
+                </button>
+            </div>
+
+            <!-- Языковые фильтры -->
+            <div class="language-filters">
+                <button class="lang-btn active" data-lang="russian">🇷🇺 Русский</button>
+                <button class="lang-btn" data-lang="english">🇬🇧 English</button>
+                <button class="lang-btn" data-lang="arabic">🇸🇦 العربية</button>
+                <button class="lang-btn" data-lang="german">🇩🇪 Deutsch</button>
+                <button class="lang-btn" data-lang="french">🇫🇷 Français</button>
+            </div>
+
+            <!-- Результаты поиска -->
+            <div class="results-header">
+                <h3><i class="fas fa-list"></i> Найденные источники</h3>
+                <span class="results-count" id="resultsCount">0 источников</span>
+            </div>
+            <div class="results-container" id="resultsContainer">
+                <div class="placeholder">
+                    <i class="fas fa-television"></i>
+                    <p>Введите название канала для поиска</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая панель - плейлист -->
+        <div class="playlist-panel">
+            <div class="playlist-header">
+                <h2><i class="fas fa-list-ul"></i> Мой плейлист</h2>
+                <button id="clearPlaylistBtn" class="clear-btn">
+                    <i class="fas fa-trash"></i> Очистить
+                </button>
+            </div>
+            <div class="playlist-container" id="playlistContainer">
+                <div class="empty-playlist">
+                    <i class="fas fa-plus-circle"></i>
+                    <p>Добавьте каналы из результатов поиска</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Мини-плеер превью -->
+    <div class="preview-modal" id="previewModal">
+        <div class="preview-content">
+            <div class="preview-header">
+                <h3 id="previewTitle">Превью канала</h3>
+                <button id="closePreview">&times;</button>
+            </div>
+            <div class="preview-video">
+                <video id="previewPlayer" controls></video>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
