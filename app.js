@@ -1,13 +1,13 @@
-// ============== TV CHANNEL SEARCHER - ПОЛНАЯ КОПИЯ PYTHON ВЕРСИИ ==============
+// ============== TV CHANNEL SEARCHER - ПОЛНАЯ РАБОЧАЯ ВЕРСИЯ ==============
 
 class TVChannelSearcher {
     constructor(githubToken = null) {
         this.githubToken = githubToken;
-        this.session = null;
         this.searchResults = [];
         this.isSearching = false;
+        this.currentLanguage = 'russian';
         
-        // Языковые модификаторы (как в Python)
+        // Языковые модификаторы
         this.langModifiers = {
             russian: ["ru", "russian", "россия"],
             english: ["en", "english", "usa"],
@@ -43,6 +43,15 @@ class TVChannelSearcher {
             btn.addEventListener('click', () => {
                 this.langBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                
+                const langMap = {
+                    '🇷🇺 Русский': 'russian',
+                    '🇬🇧 English': 'english',
+                    '🇩🇪 Deutsch': 'german',
+                    '🇫🇷 Français': 'french'
+                };
+                this.currentLanguage = langMap[btn.textContent] || 'russian';
+                
                 if (this.searchInput.value.trim()) {
                     this.searchChannel();
                 }
@@ -54,14 +63,11 @@ class TVChannelSearcher {
         
         this.renderPlaylist();
         
-        // Загружаем плейлист
-        this.playlist = this.loadPlaylist();
-        
-        console.log('✅ TV Channel Searcher готов (как Python версия)');
+        console.log('✅ TV Channel Finder готов');
         this.showToast('Введите название канала (СТС, ТНТ, Первый...)', 'info');
     }
     
-    // ============== ОСНОВНЫЕ МЕТОДЫ (ТОЧНО КАК В PYTHON) ==============
+    // ============== ОСНОВНЫЕ МЕТОДЫ ПОИСКА ==============
     
     async searchChannel() {
         if (this.isSearching) {
@@ -75,25 +81,11 @@ class TVChannelSearcher {
             return;
         }
         
-        // Определяем текущий язык
-        const activeLangBtn = document.querySelector('.lang-btn.active');
-        let language = 'russian';
-        if (activeLangBtn) {
-            const langMap = {
-                '🇷🇺 Русский': 'russian',
-                '🇬🇧 English': 'english',
-                '🇩🇪 Deutsch': 'german',
-                '🇫🇷 Français': 'french'
-            };
-            language = langMap[activeLangBtn.textContent] || 'russian';
-        }
-        
         this.isSearching = true;
         this.showLoading();
         
         try {
-            // Метод search_and_verify_channels из Python
-            const results = await this.searchAndVerifyChannels(channelName, language);
+            const results = await this.searchAndVerifyChannels(channelName);
             
             if (results.length === 0) {
                 this.showNoResults(channelName);
@@ -114,181 +106,12 @@ class TVChannelSearcher {
         }
     }
     
-    // search_channel_by_name - точная копия Python метода
-    async searchChannelByName(channelName, language) {
-        const searchQueries = [
-            `"${channelName}" extension:m3u`,
-            `"${channelName}" extension:m3u8`,
-            `${channelName} tv extension:m3u`,
-            `${channelName} channel extension:m3u`
-        ];
-        
-        const langModifiers = this.langModifiers[language] || this.langModifiers.russian;
-        const allResults = [];
-        
-        for (const query of searchQueries) {
-            for (const lang of langModifiers) {
-                const fullQuery = `${query} ${lang}`;
-                const url = `https://api.github.com/search/code?q=${encodeURIComponent(fullQuery)}&per_page=30`;
-                
-                try {
-                    const headers = {};
-                    if (this.githubToken) {
-                        headers['Authorization'] = `token ${this.githubToken}`;
-                    }
-                    
-                    const response = await fetch(url, { headers });
-                    
-                    if (response.status === 200) {
-                        const data = await response.json();
-                        const items = data.items || [];
-                        allResults.push(...items);
-                        console.log(`🔍 По запросу "${fullQuery}" найдено: ${items.length} файлов`);
-                    } else if (response.status === 403) {
-                        console.warn(`⚠️ Лимит API для запроса: ${fullQuery}`);
-                    }
-                } catch (error) {
-                    console.error(`Ошибка запроса ${fullQuery}:`, error);
-                }
-                
-                // Задержка между запросами
-                await this.delay(500);
-            }
-        }
-        
-        // Удаляем дубликаты (как в Python)
-        const uniqueResults = {};
-        for (const item of allResults) {
-            const key = `${item.repository.full_name}_${item.path}`;
-            if (!uniqueResults[key]) {
-                uniqueResults[key] = item;
-            }
-        }
-        
-        return Object.values(uniqueResults);
-    }
-    
-    // extract_stream_urls_from_file - точная копия Python метода
-    async extractStreamUrlsFromFile(repoName, filePath, channelName) {
-        const url = `https://api.github.com/repos/${repoName}/contents/${filePath}`;
-        
-        try {
-            const headers = {};
-            if (this.githubToken) {
-                headers['Authorization'] = `token ${this.githubToken}`;
-            }
-            
-            const response = await fetch(url, { headers });
-            
-            if (response.status === 200) {
-                const data = await response.json();
-                const content = atob(data.content);
-                const lines = content.split('\n');
-                
-                const foundChannels = [];
-                
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    
-                    if (line.includes('#EXTINF:') && line.toLowerCase().includes(channelName.toLowerCase())) {
-                        if (i + 1 < lines.length) {
-                            const streamUrl = lines[i + 1].trim();
-                            
-                            // Проверяем, что это реальный URL
-                            if (streamUrl && !streamUrl.startsWith('#')) {
-                                // Пропускаем ссылки на GitHub
-                                if (!streamUrl.includes('github.com') && !streamUrl.includes('raw.githubusercontent.com')) {
-                                    
-                                    // Проверяем, что URL похож на поток
-                                    const streamExtensions = ['.m3u8', '.ts', '.mpd', '.m3u', 'stream', 'live', 'playlist'];
-                                    const isValidStream = streamExtensions.some(ext => streamUrl.toLowerCase().includes(ext));
-                                    
-                                    if (isValidStream) {
-                                        // Извлекаем название
-                                        const nameMatch = line.match(/,([^,]+)$/);
-                                        const channelTitle = nameMatch ? nameMatch[1].trim() : "Unknown";
-                                        
-                                        // Извлекаем группу
-                                        const groupMatch = line.match(/group-title="([^"]*)"/);
-                                        const group = groupMatch ? groupMatch[1] : "No group";
-                                        
-                                        // Извлекаем логотип
-                                        const logoMatch = line.match(/tvg-logo="([^"]*)"/);
-                                        const logo = logoMatch ? logoMatch[1] : "";
-                                        
-                                        foundChannels.push({
-                                            name: channelTitle,
-                                            url: streamUrl,
-                                            group: group,
-                                            logo: logo,
-                                            source_repo: repoName,
-                                            source_file: filePath
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                return foundChannels;
-            }
-        } catch (error) {
-            console.warn(`Ошибка чтения файла ${filePath}:`, error);
-        }
-        
-        return null;
-    }
-    
-    // check_stream_availability - точная копия Python метода
-    async checkStreamAvailability(url, timeout = 5000) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-            
-            // Пробуем HEAD запрос
-            const response = await fetch(url, {
-                method: 'HEAD',
-                signal: controller.signal,
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if ([200, 206, 302, 301].includes(response.status)) {
-                return { available: true, statusCode: response.status, message: "Доступен" };
-            }
-            
-            // Если HEAD не работает, пробуем GET с диапазоном
-            if (response.status === 405) {
-                const getResponse = await fetch(url, {
-                    headers: { 'Range': 'bytes=0-1', 'User-Agent': 'Mozilla/5.0' }
-                });
-                if ([200, 206].includes(getResponse.status)) {
-                    return { available: true, statusCode: getResponse.status, message: "Доступен (GET)" };
-                }
-            }
-            
-            return { available: false, statusCode: response.status, message: `Ошибка ${response.status}` };
-            
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                return { available: false, statusCode: 0, message: "Таймаут" };
-            }
-            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                return { available: false, statusCode: 0, message: "Ошибка соединения" };
-            }
-            return { available: false, statusCode: 0, message: `Ошибка: ${error.message.substring(0, 30)}` };
-        }
-    }
-    
-    // search_and_verify_channels - точная копия Python метода
-    async searchAndVerifyChannels(channelName, language, maxFiles = 50, maxWorkers = 5, verifyOnlyWorking = true) {
+    async searchAndVerifyChannels(channelName) {
         console.log(`\n🔍 Поиск потоков для канала '${channelName}'...`);
         this.updateStatus(`Поиск файлов на GitHub...`);
         
         // Поиск файлов
-        const files = await this.searchChannelByName(channelName, language);
+        const files = await this.searchChannelByName(channelName);
         
         if (files.length === 0) {
             console.log("❌ Файлы с каналом не найдены");
@@ -300,16 +123,18 @@ class TVChannelSearcher {
         
         // Извлекаем URL из файлов
         const allPotentialStreams = [];
-        const filesToCheck = files.slice(0, maxFiles);
+        const filesToCheck = files.slice(0, 15); // Не больше 15 файлов
         
-        for (const fileInfo of filesToCheck) {
-            const repoName = fileInfo.repository.full_name;
-            const filePath = fileInfo.path;
-            const streams = await this.extractStreamUrlsFromFile(repoName, filePath, channelName);
+        for (let i = 0; i < filesToCheck.length; i++) {
+            const fileInfo = filesToCheck[i];
+            this.updateStatus(`Анализ файла ${i+1}/${filesToCheck.length}...`);
+            
+            const streams = await this.extractStreamsFromFile(fileInfo, channelName);
             if (streams && streams.length > 0) {
                 allPotentialStreams.push(...streams);
             }
-            await this.delay(300);
+            
+            await this.delay(500);
         }
         
         if (allPotentialStreams.length === 0) {
@@ -322,34 +147,24 @@ class TVChannelSearcher {
         
         // Проверяем доступность потоков
         const verifiedStreams = [];
-        let checked = 0;
         
-        for (const stream of allPotentialStreams) {
-            const { available, statusCode, message } = await this.checkStreamAvailability(stream.url);
-            checked++;
+        for (let i = 0; i < allPotentialStreams.length; i++) {
+            const stream = allPotentialStreams[i];
+            const result = await this.checkStreamAvailability(stream.url);
             
             stream.checked = true;
-            stream.is_working = available;
-            stream.status_code = statusCode;
-            stream.check_message = message;
+            stream.is_working = result.available;
+            stream.status_code = result.statusCode;
+            stream.check_message = result.message;
             
-            if (verifyOnlyWorking) {
-                if (available) {
-                    verifiedStreams.push(stream);
-                    console.log(`✅ [${checked}/${allPotentialStreams.length}] ${stream.name} - ДОСТУПЕН`);
-                } else {
-                    console.log(`❌ [${checked}/${allPotentialStreams.length}] ${stream.name} - ${message}`);
-                }
-            } else {
+            if (result.available) {
                 verifiedStreams.push(stream);
-                if (available) {
-                    console.log(`✅ [${checked}/${allPotentialStreams.length}] ${stream.name} - ДОСТУПЕН`);
-                } else {
-                    console.log(`⚠️ [${checked}/${allPotentialStreams.length}] ${stream.name} - ${message}`);
-                }
+                console.log(`✅ [${i+1}/${allPotentialStreams.length}] ${stream.name} - ДОСТУПЕН`);
+            } else {
+                console.log(`❌ [${i+1}/${allPotentialStreams.length}] ${stream.name} - ${result.message}`);
             }
             
-            this.updateProgress(checked, allPotentialStreams.length, stream.name);
+            this.updateProgress(i+1, allPotentialStreams.length, stream.name);
             await this.delay(200);
         }
         
@@ -362,6 +177,155 @@ class TVChannelSearcher {
         }
         
         return Object.values(uniqueStreams);
+    }
+    
+    async searchChannelByName(channelName) {
+        const searchQueries = [
+            `"${channelName}" extension:m3u`,
+            `"${channelName}" extension:m3u8`,
+            `${channelName} tv extension:m3u`,
+            `${channelName} channel extension:m3u`
+        ];
+        
+        const langModifiers = this.langModifiers[this.currentLanguage] || this.langModifiers.russian;
+        const allResults = [];
+        
+        for (const query of searchQueries) {
+            for (const lang of langModifiers) {
+                const fullQuery = `${query} ${lang}`;
+                const url = `https://api.github.com/search/code?q=${encodeURIComponent(fullQuery)}&per_page=30`;
+                
+                try {
+                    console.log(`🔍 GitHub запрос: ${fullQuery}`);
+                    
+                    const headers = {};
+                    if (this.githubToken) {
+                        headers['Authorization'] = `token ${this.githubToken}`;
+                    }
+                    headers['Accept'] = 'application/vnd.github.v3+json';
+                    
+                    const response = await fetch(url, { headers });
+                    
+                    if (response.status === 200) {
+                        const data = await response.json();
+                        const items = data.items || [];
+                        allResults.push(...items);
+                        console.log(`✅ Найдено ${items.length} файлов`);
+                    } else if (response.status === 403) {
+                        console.warn(`⚠️ Лимит API, ждем...`);
+                        await this.delay(60000);
+                    } else {
+                        console.log(`❌ Статус ${response.status}`);
+                    }
+                    
+                } catch (error) {
+                    console.error(`Ошибка запроса:`, error);
+                }
+                
+                await this.delay(600);
+            }
+        }
+        
+        // Удаляем дубликаты
+        const uniqueResults = {};
+        for (const item of allResults) {
+            const key = `${item.repository.full_name}_${item.path}`;
+            if (!uniqueResults[key]) {
+                uniqueResults[key] = item;
+            }
+        }
+        
+        return Object.values(uniqueResults);
+    }
+    
+    async extractStreamsFromFile(fileInfo, searchQuery) {
+        const channels = [];
+        
+        try {
+            // ПРАВИЛЬНОЕ формирование URL для raw.githubusercontent.com
+            const repoName = fileInfo.repository.full_name;
+            const filePath = fileInfo.path;
+            const rawUrl = `https://raw.githubusercontent.com/${repoName}/${filePath}`;
+            
+            console.log(`📥 Загрузка: ${rawUrl.substring(0, 80)}...`);
+            
+            const response = await fetch(rawUrl);
+            
+            if (!response.ok) {
+                console.warn(`❌ Ошибка ${response.status}`);
+                return channels;
+            }
+            
+            const content = await response.text();
+            const lines = content.split('\n');
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                if (line.includes('#EXTINF:') && line.toLowerCase().includes(searchQuery.toLowerCase())) {
+                    if (i + 1 < lines.length) {
+                        const streamUrl = lines[i + 1].trim();
+                        
+                        if (streamUrl && !streamUrl.startsWith('#') && 
+                            !streamUrl.includes('github.com') && 
+                            !streamUrl.includes('raw.githubusercontent.com') &&
+                            streamUrl.startsWith('http')) {
+                            
+                            const nameMatch = line.match(/,([^,]+)$/);
+                            const channelTitle = nameMatch ? nameMatch[1].trim() : "Unknown";
+                            const groupMatch = line.match(/group-title="([^"]*)"/);
+                            const group = groupMatch ? groupMatch[1] : "No group";
+                            const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+                            const logo = logoMatch ? logoMatch[1] : "";
+                            
+                            channels.push({
+                                name: channelTitle,
+                                url: streamUrl,
+                                group: group,
+                                logo: logo,
+                                source_repo: repoName,
+                                source_file: filePath
+                            });
+                        }
+                    }
+                }
+            }
+            
+            if (channels.length > 0) {
+                console.log(`✅ Найдено ${channels.length} каналов`);
+            }
+            
+        } catch (error) {
+            console.warn(`❌ Ошибка парсинга:`, error.message);
+        }
+        
+        return channels;
+    }
+    
+    async checkStreamAvailability(url, timeout = 5000) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
+            const response = await fetch(url, {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if ([200, 206, 302, 301].includes(response.status)) {
+                return { available: true, statusCode: response.status, message: "Доступен" };
+            }
+            
+            return { available: false, statusCode: response.status, message: `Ошибка ${response.status}` };
+            
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return { available: false, statusCode: 0, message: "Таймаут" };
+            }
+            return { available: false, statusCode: 0, message: "Ошибка соединения" };
+        }
     }
     
     // ============== UI МЕТОДЫ ==============
@@ -431,11 +395,9 @@ class TVChannelSearcher {
                 this.previewPlayer.play().catch(e => console.log('Autoplay blocked'));
             });
             this.previewPlayer.hls = hls;
-        } else if (this.previewPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        } else {
             this.previewPlayer.src = channel.url;
             this.previewPlayer.play().catch(e => console.log('Autoplay blocked'));
-        } else {
-            this.showToast('Формат не поддерживается', 'warning');
         }
     }
     
@@ -475,10 +437,9 @@ class TVChannelSearcher {
     
     renderPlaylist() {
         const playlist = this.loadPlaylist();
-        const container = this.playlistContainer;
         
         if (playlist.length === 0) {
-            container.innerHTML = `
+            this.playlistContainer.innerHTML = `
                 <div class="empty-playlist">
                     <i class="fas fa-plus-circle"></i>
                     <p>Добавьте каналы из результатов поиска</p>
@@ -508,7 +469,7 @@ class TVChannelSearcher {
             </div>
         `).join('');
         
-        container.innerHTML = html;
+        this.playlistContainer.innerHTML = html;
     }
     
     playFromPlaylist(index) {
@@ -570,9 +531,9 @@ class TVChannelSearcher {
         this.resultsContainer.innerHTML = `
             <div class="loading">
                 <i class="fas fa-spinner fa-spin"></i>
-                <p>🔍 Поиск файлов на GitHub...</p>
+                <p>🔍 Поиск каналов на GitHub...</p>
                 <small style="color: #888; margin-top: 10px; display: block;">
-                    Выполняется поиск по всему GitHub (как в Python версии)
+                    Выполняется поиск по всему GitHub
                 </small>
             </div>
         `;
@@ -597,7 +558,7 @@ class TVChannelSearcher {
                 <i class="fas fa-spinner fa-spin"></i>
                 <p>Проверка доступности потоков...</p>
                 <p style="font-size: 14px; margin-top: 10px;">${current}/${total}</p>
-                <p style="font-size: 12px; color: #888; max-width: 80%; margin: 10px auto;">${itemName || ''}</p>
+                <p style="font-size: 12px; color: #888;">${itemName || ''}</p>
                 <div style="width: 80%; height: 4px; background: #e0e0e0; margin-top: 20px; border-radius: 2px;">
                     <div style="width: ${(current/total)*100}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2);"></div>
                 </div>
@@ -612,11 +573,11 @@ class TVChannelSearcher {
                 <h3>Каналы не найдены</h3>
                 <p>По запросу "${this.escapeHtml(channelName)}" ничего не найдено</p>
                 <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; text-align: left;">
-                    <p><strong>💡 Советы (как в Python версии):</strong></p>
+                    <p><strong>💡 Советы:</strong></p>
                     <ul style="margin-top: 10px;">
                         <li>• Попробуйте другие названия (СТС, ТНТ, Россия 1)</li>
                         <li>• Ищите на английском (STS, TNT, Russia 1)</li>
-                        <li>• Добавьте GitHub токен для увеличения лимита</li>
+                        <li>• Подождите 5-10 минут если был лимит</li>
                     </ul>
                 </div>
             </div>
